@@ -58,7 +58,6 @@ def calculate_identity(alignment):
     return (matches / total) * 100
 
 
-# Example sequences for demo (define these to avoid undefined variable errors)
 human_actin_seq = "ATGCGTACGTTAGC"
 mouse_actin_seq = "ATGCGTTCGTTAGC"
 
