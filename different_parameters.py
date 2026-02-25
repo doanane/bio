@@ -3,7 +3,7 @@ from Bio.Align import substitution_matrices
 
 
 try:
-    import pandas as pd
+    import pandas as pd # type: ignore
 except Exception:
     pd = None
 
