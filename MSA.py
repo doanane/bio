@@ -241,23 +241,117 @@ def fallback_msa(input_fasta, output_file="fallback_aln.fasta"):
     return msa, 0.0
 
 
-if __name__ == "__main__":
-    
-    fasta = "hemoglobin.fasta"
-    if not os.path.exists(fasta):
-        
-        try:
-            import importlib
-            importlib.import_module('MSA')
-        except Exception:
-            print(f"{fasta} not found. Please create it before running alignment.")
+def visualize_msa(alignment, label=""):
+    """Print a simple text visualization of a MultipleSeqAlignment."""
+    print(f"\n{'='*60}")
+    if label:
+        print(f"  {label}")
+    print(f"  {len(alignment)} sequences  x  {alignment.get_alignment_length()} columns")
+    print(f"{'='*60}")
 
+    # Ruler line every 10 columns
+    length = alignment.get_alignment_length()
+    ruler = ""
+    for i in range(1, length + 1):
+        if i % 10 == 0:
+            marker = str(i)
+            ruler = ruler[: i - len(marker)] + marker
+        elif i > len(ruler):
+            ruler += "."
+    print(f"{'':15} {ruler}")
+
+    for rec in alignment:
+        print(f"{rec.id:<15} {str(rec.seq)}")
+
+    # Conservation line
+    conservation_line = ""
+    for col in range(length):
+        column = [str(rec.seq)[col].upper() for rec in alignment]
+        residues = [c for c in column if c != "-"]
+        if not residues:
+            conservation_line += " "
+        elif len(set(residues)) == 1:
+            conservation_line += "*"        # fully conserved
+        elif len(residues) == len(column):
+            conservation_line += "."        # no gaps, some variation
+        else:
+            conservation_line += " "
+    print(f"{'':15} {conservation_line}")
+    print(f"  (* = fully conserved   . = no gaps, variable   blank = gaps present)")
+
+
+def compute_msa_stats(alignment):
+    """Return basic statistics for an alignment."""
+    length = alignment.get_alignment_length()
+    n = len(alignment)
+    fully_conserved = 0
+    gap_cols = 0
+
+    for col in range(length):
+        column = [str(rec.seq)[col].upper() for rec in alignment]
+        residues = [c for c in column if c != "-"]
+        if len(residues) < len(column):
+            gap_cols += 1
+        if len(set(residues)) == 1 and residues:
+            fully_conserved += 1
+
+    return {
+        "sequences": n,
+        "alignment_length": length,
+        "fully_conserved_cols": fully_conserved,
+        "gap_containing_cols": gap_cols,
+        "pct_conserved": fully_conserved / length * 100 if length else 0,
+    }
+
+
+if __name__ == "__main__":
+    fasta = "hemoglobin.fasta"
+
+    if not os.path.exists(fasta):
+        print(f"ERROR: {fasta} not found. Please provide a FASTA file.")
+        raise SystemExit(1)
+
+    # ── Step 1: try external tools ──────────────────────────────────────
     msa_results = compare_msa_methods(fasta)
 
-    
-    print("\nMSA Summary:")
+    # ── Step 2: if NO external tool succeeded, run built-in fallback ────
+    any_success = any("alignment" in v for v in msa_results.values())
+
+    if not any_success:
+        print("\nNo external MSA tools found — running built-in progressive alignment...")
+        try:
+            fallback_aln, fallback_time = fallback_msa(fasta)
+            msa_results["Progressive (built-in)"] = {
+                "alignment": fallback_aln,
+                "runtime": fallback_time,
+                "length": fallback_aln.get_alignment_length(),
+            }
+            print(f"  Done. Alignment length: {fallback_aln.get_alignment_length()} columns")
+        except Exception as e:
+            print(f"  Fallback also failed: {e}")
+            raise SystemExit(1)
+
+    # ── Step 3: print summary table ─────────────────────────────────────
+    print("\n" + "=" * 60)
+    print("  MSA Comparison Summary")
+    print("=" * 60)
+    print(f"{'Tool':<25} {'Status':<12} {'Runtime(s)':>10}  {'Aln length':>10}")
+    print("-" * 60)
     for tool, res in msa_results.items():
-        if 'error' in res:
-            print(f"- {tool}: ERROR - {res['error']}")
+        if "error" in res:
+            print(f"{tool:<25} {'SKIPPED':<12} {'N/A':>10}  {'N/A':>10}")
         else:
-            print(f"- {tool}: runtime={res['runtime']:.2f}s, length={res['length']}")
+            print(f"{tool:<25} {'OK':<12} {res['runtime']:>10.2f}  {res['length']:>10}")
+
+    # ── Step 4: visualize and show statistics for each successful result ─
+    for tool, res in msa_results.items():
+        if "alignment" not in res:
+            continue
+        aln = res["alignment"]
+        visualize_msa(aln, label=f"Alignment: {tool}")
+        stats = compute_msa_stats(aln)
+        print(f"\n  Statistics for {tool}:")
+        print(f"    Sequences            : {stats['sequences']}")
+        print(f"    Alignment length     : {stats['alignment_length']}")
+        print(f"    Fully conserved cols : {stats['fully_conserved_cols']} ({stats['pct_conserved']:.1f}%)")
+        print(f"    Gap-containing cols  : {stats['gap_containing_cols']}")
