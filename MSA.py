@@ -304,6 +304,52 @@ def compute_msa_stats(alignment):
     }
 
 
+def create_bar_view_graph(msa_results, output_file="msa_bar_view.png"):
+    """Create a side-by-side bar-view graph for runtime and alignment length."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("\nmatplotlib is not installed. Skipping bar-view graph.")
+        print("Install it with: pip install matplotlib")
+        return None
+
+    successful_tools = [tool for tool, result in msa_results.items() if "alignment" in result]
+    if not successful_tools:
+        print("\nNo successful alignments to plot.")
+        return None
+
+    runtimes = [msa_results[tool]["runtime"] for tool in successful_tools]
+    aln_lengths = [msa_results[tool]["length"] for tool in successful_tools]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    runtime_bars = axes[0].bar(successful_tools, runtimes, color="#2A9D8F")
+    axes[0].set_title("MSA Runtime (seconds)")
+    axes[0].set_ylabel("Seconds")
+    axes[0].tick_params(axis="x", rotation=20)
+
+    for bar, value in zip(runtime_bars, runtimes):
+        axes[0].text(bar.get_x() + bar.get_width() / 2, value, f"{value:.2f}",
+                     ha="center", va="bottom", fontsize=8)
+
+    length_bars = axes[1].bar(successful_tools, aln_lengths, color="#E76F51")
+    axes[1].set_title("MSA Alignment Length")
+    axes[1].set_ylabel("Columns")
+    axes[1].tick_params(axis="x", rotation=20)
+
+    for bar, value in zip(length_bars, aln_lengths):
+        axes[1].text(bar.get_x() + bar.get_width() / 2, value, f"{int(value)}",
+                     ha="center", va="bottom", fontsize=8)
+
+    fig.suptitle("MSA Tool Comparison - Bar View", fontsize=12)
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.savefig(output_file, dpi=180)
+    plt.close(fig)
+
+    return os.path.abspath(output_file)
+
+
 if __name__ == "__main__":
     fasta = "hemoglobin.fasta"
 
@@ -355,3 +401,8 @@ if __name__ == "__main__":
         print(f"    Alignment length     : {stats['alignment_length']}")
         print(f"    Fully conserved cols : {stats['fully_conserved_cols']} ({stats['pct_conserved']:.1f}%)")
         print(f"    Gap-containing cols  : {stats['gap_containing_cols']}")
+
+    # Step 5: save a bar-view graph for quick visual comparison
+    graph_path = create_bar_view_graph(msa_results)
+    if graph_path:
+        print(f"\nBar-view graph saved to: {graph_path}")
